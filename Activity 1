@@ -1,0 +1,159 @@
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DBConnection {
+    private static final String URL = "jdbc:mysql://localhost:3306/photocard_store";
+    private static final String USER = "root"; // Change if needed
+    private static final String PASSWORD = ""; // Change if needed
+
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(URL, USER, PASSWORD);
+    }
+}
+
+public class Photocard {
+    String id;
+    String name;
+    double price;
+    int quantity;
+
+    public Photocard(String id, String name, double price, int quantity) {
+        this.id = id;
+        this.name = name;
+        this.price = price;
+        this.quantity = quantity;
+    }
+
+    public void display() {
+        System.out.println("ID: " + id + " | Name: " + name + " | Price: $" + price + " | Quantity: " + quantity);
+    }
+}
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Scanner;
+
+public class PhotocardStore {
+    private static final ArrayList<Photocard> inventory = new ArrayList<>();
+    private static final Scanner scanner = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        initializeStore();
+        while (true) {
+            System.out.println("\nPhotocard Store");
+            System.out.println("1. View Inventory");
+            System.out.println("2. Purchase Photocard");
+            System.out.println("3. Exit");
+            System.out.print("Choose an option: ");
+            int choice = processInput(scanner.nextLine());
+
+            switch (choice) {
+                case 1:
+                    viewInventory();
+                    break;
+                case 2:
+                    purchasePhotocard();
+                    break;
+                case 3:
+                    System.out.println("Thank you for visiting the Photocard Store!");
+                    return;
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+            }
+        }
+    }
+
+    private static void initializeStore() {
+        inventory.clear();
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM photocards")) {
+
+            while (rs.next()) {
+                inventory.add(new Photocard(
+                        rs.getString("id"),
+                        rs.getString("name"),
+                        rs.getDouble("price"),
+                        rs.getInt("quantity")
+                ));
+            }
+
+        } catch (Exception e) {
+            System.out.println("Database initialization error: " + e.getMessage());
+        }
+    }
+
+    private static void viewInventory() {
+        System.out.println("\nAvailable Photocards:");
+        for (Photocard photocard : inventory) {
+            photocard.display();
+        }
+    }
+
+    private static void purchasePhotocard() {
+        System.out.print("Enter Photocard ID to purchase: ");
+        String idInput = normalizeInput(scanner.nextLine());
+
+        for (Photocard photocard : inventory) {
+            if (normalizeInput(photocard.id).equals(idInput)) {
+                if (photocard.quantity > 0) {
+                    try (Connection conn = DBConnection.getConnection();
+                         PreparedStatement pstmt = conn.prepareStatement(
+                                 "UPDATE photocards SET quantity = quantity - 1 WHERE id = ? AND quantity > 0")) {
+
+                        pstmt.setString(1, photocard.id);
+                        int updated = pstmt.executeUpdate();
+
+                        if (updated > 0) {
+                            photocard.quantity--;
+                            System.out.println("Successfully purchased: " + photocard.name);
+                        } else {
+                            System.out.println("Sorry, this photocard is out of stock.");
+                        }
+
+                    } catch (Exception e) {
+                        System.out.println("Error processing purchase: " + e.getMessage());
+                    }
+                } else {
+                    System.out.println("Sorry, this photocard is out of stock.");
+                }
+                return;
+            }
+        }
+
+        System.out.println("Photocard not found.");
+    }
+
+    private static int processInput(String input) {
+        try {
+            return Integer.parseInt(input.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private static String normalizeInput(String input) {
+        return input.trim().toLowerCase().replaceAll("[^a-z0-9]", "");
+    }
+}
+
+CREATE DATABASE photocard_store;
+USE photocard_store;
+
+CREATE TABLE photocards (
+    id VARCHAR(10) PRIMARY KEY,
+    name VARCHAR(100),
+    price DOUBLE,
+    quantity INT
+);
+
+INSERT INTO photocards (id, name, price, quantity) VALUES
+('P001', 'BTS Jungkook', 12.99, 5),
+('P002', 'Blackpink Lisa', 14.99, 3),
+('P003', 'Twice Nayeon', 10.99, 4);
+
+
